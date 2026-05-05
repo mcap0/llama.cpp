@@ -305,7 +305,11 @@ json oaicompat_completion_params_parse(const json & body);
 json oaicompat_chat_params_parse(
     json & body, /* openai api json semantics */
     const server_chat_params & opt,
-    std::vector<raw_buffer> & out_files);
+    std::vector<raw_buffer> & out_files,
+    const llama_vocab * vocab = nullptr,
+    bool truncate_input = false,
+    int n_ctx = 0,
+    int n_predict = -1);
 
 // TODO: move it to server-task.cpp
 json format_embeddings_response_oaicompat(

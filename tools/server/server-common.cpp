@@ -13,6 +13,13 @@
 #include <sstream>
 #include <fstream>
 
+// Forward declarations
+void truncate_messages(
+        const llama_vocab * vocab,
+        json & messages,
+        const int n_ctx,
+        const int n_predict);
+
 json format_error_response(const std::string & message, const enum error_type type) {
     std::string type_str;
     int code = 500;
@@ -911,7 +918,11 @@ static void handle_media(
 json oaicompat_chat_params_parse(
     json & body, /* openai api json semantics */
     const server_chat_params & opt,
-    std::vector<raw_buffer> & out_files)
+    std::vector<raw_buffer> & out_files,
+    const llama_vocab * vocab,
+    bool truncate_input,
+    int n_ctx,
+    int n_predict)
 {
     json llama_params;
 
@@ -966,6 +977,12 @@ json oaicompat_chat_params_parse(
     if (!messages.is_array()) {
         throw std::invalid_argument("Expected 'messages' to be an array");
     }
+
+    // Apply input truncation if enabled
+    if (truncate_input && vocab != nullptr && n_ctx > 0) {
+        truncate_messages(vocab, messages, n_ctx, n_predict);
+    }
+
     for (auto & msg : messages) {
         std::string role = json_value(msg, "role", std::string());
         if (role != "assistant" && !msg.contains("content")) {
@@ -1437,6 +1454,77 @@ bool is_valid_utf8(const std::string & str) {
     }
 
     return true;
+}
+
+// Truncate messages to fit within context limit
+// Keeps system message and last user message, removes oldest messages first
+void truncate_messages(
+        const llama_vocab * vocab,
+        json & messages,
+        const int n_ctx,
+        const int n_predict) {
+    if (!messages.is_array() || messages.size() <= 1) {
+        return;
+    }
+
+    // Calculate target token limit (leave room for response)
+    // If n_predict is -1 (unlimited), use full context for prompt
+    const int max_tokens = (n_predict > 0) ? (n_ctx - n_predict) : n_ctx;
+    if (max_tokens <= 0) {
+        return;
+    }
+
+    // Always keep system message (first message with role "system") and last user message
+    int system_idx = -1;
+    int last_user_idx = -1;
+
+    for (size_t i = 0; i < messages.size(); i++) {
+        std::string role = json_value(messages[i], "role", std::string());
+        if (role == "system" && system_idx == -1) {
+            system_idx = (int)i;
+        }
+        if (role == "user") {
+            last_user_idx = (int)i;
+        }
+    }
+
+    // Tokenize all messages and calculate total
+    std::vector<llama_tokens> msg_tokens(messages.size());
+    int total_tokens = 0;
+
+    for (size_t i = 0; i < messages.size(); i++) {
+        // Extract text content from message
+        std::string text;
+        if (messages[i].contains("content") && messages[i]["content"].is_string()) {
+            text = messages[i]["content"].get<std::string>();
+        }
+        msg_tokens[i] = common_tokenize(vocab, text, false, false);
+        total_tokens += (int)msg_tokens[i].size();
+    }
+
+    // If under limit, no truncation needed
+    if (total_tokens <= max_tokens) {
+        return;
+    }
+
+    // Remove messages from oldest to newest (except system and last user)
+    for (int i = 0; i < (int)messages.size() && total_tokens > max_tokens; i++) {
+        // Skip system message and last user message
+        if (i == system_idx || i == last_user_idx) {
+            continue;
+        }
+
+        int tokens_to_remove = (int)msg_tokens[i].size();
+        messages.erase(messages.begin() + i);
+        msg_tokens.erase(msg_tokens.begin() + i);
+
+        // Adjust indices after removal
+        if (system_idx > i) system_idx--;
+        if (last_user_idx > i) last_user_idx--;
+        i--; // recheck this index
+
+        total_tokens -= tokens_to_remove;
+    }
 }
 
 llama_tokens format_prompt_infill(

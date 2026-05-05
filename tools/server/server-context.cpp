@@ -3787,10 +3787,15 @@ void server_routes::init_routes() {
         auto res = create_response();
         std::vector<raw_buffer> files;
         json body = json::parse(req.body);
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -3805,10 +3810,15 @@ void server_routes::init_routes() {
         json body = server_chat_convert_responses_to_chatcmpl(json::parse(req.body));
         SRV_DBG("%s\n", "Request converted: OpenAI Responses -> OpenAI Chat Completions");
         SRV_DBG("converted request: %s\n", body.dump().c_str());
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -3833,10 +3843,15 @@ void server_routes::init_routes() {
             files);
         SRV_DBG("%s\n", "Request converted: OpenAI Transcriptions -> OpenAI Chat Completions");
         SRV_DBG("converted request: %s\n", body.dump().c_str());
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -3851,10 +3866,15 @@ void server_routes::init_routes() {
         json body = server_chat_convert_anthropic_to_oai(json::parse(req.body));
         SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
         SRV_DBG("converted request: %s\n", body.dump().c_str());
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
         return handle_completions_impl(
             req,
             SERVER_TASK_TYPE_COMPLETION,
@@ -3869,10 +3889,15 @@ void server_routes::init_routes() {
         json body = server_chat_convert_anthropic_to_oai(json::parse(req.body));
         SRV_DBG("%s\n", "Request converted: Anthropic -> OpenAI Chat Completions");
         SRV_DBG("converted request: %s\n", body.dump().c_str());
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json body_parsed = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
 
         json prompt = body_parsed.at("prompt");
         llama_tokens tokens = tokenize_mixed(ctx_server.vocab, prompt, true, true);
@@ -3885,10 +3910,15 @@ void server_routes::init_routes() {
         auto res = create_response();
         std::vector<raw_buffer> files; // dummy, unused
         json body = json::parse(req.body);
+        int n_predict = json_value(body, "max_tokens", json_value(body, "n_predict", params.n_predict));
         json data = oaicompat_chat_params_parse(
             body,
             meta->chat_params,
-            files);
+            files,
+            ctx_server.vocab,
+            params.truncate_input,
+            meta->slot_n_ctx,
+            n_predict);
         res->ok({{ "prompt", std::move(data.at("prompt")) }});
         return res;
     };
